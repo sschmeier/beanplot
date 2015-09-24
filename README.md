@@ -19,10 +19,10 @@ Global install:
 Make the script executable and copy it to a directory that is in your PATH variable (e.g. ~/bin):
 
 ```bash
->chmod u+x beanplot
->cp beanplot ~/bin
+$ chmod u+x beanplot
+$ cp beanplot ~/bin
 #test
->beanplot -h
+$ beanplot -h
 ```
 
 DEPENDENCIES
