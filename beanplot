@@ -1,0 +1,480 @@
+#!/usr/bin/env python
+"""
+NAME: sebio.beanplot.py
+
+
+DESCRIPTION
+===========
+
+INSTALLATION
+============
+
+DEPENDENCIES
+============
+- matplotlib.cm
+- matplotlib.pylab
+- scipy.stats
+- numpy
+
+USAGE
+=====
+
+VERSION HISTORY
+===============
+
+0.1.7  2015/09/25    Cleaned code-base.
+0.1.6  2014/10/08    Added mean strip color choice.
+0.1.5  2014/09/01    Added possibility to connect row-elements trough a line.
+0.1.4  2014/08/28    Made x and y axes limits adjustable
+0.1.3  2014/08/28    Small bug-fix of x-label display
+0.1.2  2014/07/31    Working version.
+0.1    2014/06/04    Initial version.
+
+"""
+__version__='0.1.7'
+__date__='2015/09/25'
+__email__='s.schmeier@gmail.com'
+__author__='Sebastian Schmeier'
+# standard python libs
+import sys, argparse, csv, gzip, bz2, zipfile
+# special python libs
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+import numpy as np
+import scipy.stats
+
+def violinplot(ax,
+               data,
+               pos,
+               violinColor='#3366CC',
+               multipleColors=[],
+               bp=True):
+    """
+    Make a violin plot of each column `data` matrix.
+    If MultipleColors is an array with colors and the same length as the data,
+    each violin gets a different color.
+    Adapted from:
+    Flavio Coelho (http://pyinsci.blogspot.co.nz/2009/09/violin-plot-with-matplotlib.html)
+    """
+    dist = np.max(pos)-np.min(pos)
+    w = min(0.15*max(dist,1.0),0.5)
+    for i in xrange(len(pos)):
+        d = data[:,i]
+        p = pos[i]
+        k = scipy.stats.gaussian_kde(d) # calculates the kernel density
+        s = np.std(k.dataset)  # FIXME: magic number, needs to be better
+        m = k.dataset.min() - s # lower bound of violin
+        M = k.dataset.max() + s # upper bound of violin
+        x = np.arange(m,M,(M-m)/100.) # support for violin
+        v = k.evaluate(x) # violin profile (density curve)
+        v = v/v.max() * (0.75*w) # scaling the violin to the available space
+
+        if len(multipleColors)>0:
+            aColor = multipleColors[i]
+        else:
+            aColor = violinColor
+            
+        ax.fill_betweenx(x, -v+p, v+p, alpha=1, color=aColor)
+    if bp:
+        ax.boxplot(data,notch=1,positions=pos,vert=1)
+
+def stripchart(ax,
+               data,
+               pos,
+               mean=False,
+               median=False,
+               strip=True,
+               width=None,
+               meanColor = "k",
+               stripColor="#000000",
+               medianMarkerColor='r'):
+    """
+    Plot samples given in columns of  `data` matrix as horizontal lines.
+
+    Keyword arguments:
+        mean: plot mean of each dataset as a thicker line if True
+        median: plot median of each dataset as a dot if True.
+        strip: do not show individual observations
+        width: Horizontal width of a single dataset plot.
+    """
+      # calculate horizontal bar width
+    if width:
+        w = width
+    else:
+        dist = np.max(pos)-np.min(pos)
+        w = min(0.15*max(dist,1.0),0.5)
+
+    # plot each distribution
+    for i in xrange(len(pos)):
+        d = data[:,i]
+        p = pos[i]
+        
+        hw = w/8.0
+        if strip:
+            ax.hlines(d, p-hw, p+hw, lw=0.5, color=stripColor)
+        if mean:
+            ax.hlines(np.mean(d), p-0.75*w, p+0.75*w, lw=1.0, color=meanColor)
+        if median:
+            ax.plot(p, np.median(d), 'o', color=medianMarkerColor, markeredgecolor = 'none')
+
+def beanplot(ax,              # axis-object
+             data,            # the numpy array, each column one beanplot
+             pos,             # the positions where to plot the beanplot (1-d array)
+             mean=True,
+             median=True,
+             strip=True,
+             overallMean=True,
+             overallMedian=False,
+             violinColor='#3366CC',
+             stripColor="#FFFFFF",
+             medianMarkerColor='#FFFFFF',
+             meanColor = "#FFFFFF",
+             multipleColors = []
+             ):
+    """
+    Make a bean plot of each column in the `data` matrix.
+    data: A numpy matrix, each column represent a group to print a beanplot for.
+    Reference: http://www.jstatsoft.org/v28/c01/paper
+    """
+    # FIXME: Implement also asymmetric beanplots
+    if len(pos) != data.shape[1]:
+        sys.stderr.write('Data matrix and position array not of same length.\n')
+        sys.exit()  
+    if overallMean:
+         ax.axhline(np.mean(data), color='k', linestyle=':', alpha=0.5)
+    if overallMedian:
+         ax.axhline(np.median(data), color='k', linestyle='--', alpha=0.5)
+    violinplot(ax, data, pos, violinColor, multipleColors, False)
+    stripchart(ax, data, pos, mean, median, strip, meanColor=meanColor, stripColor=stripColor, medianMarkerColor=medianMarkerColor)
+
+def parse_cmdline():
+    # parse cmdline -----------------------------------------------------------
+    sDescription = 'Beanplot for each column of a file.' 
+    sVersion='version %s, date %s' %(__version__,__date__)
+    sEpilog = 'Copyright %s (%s)' %(__author__, __email__)
+
+    oParser = argparse.ArgumentParser(description=sDescription,
+                                      version=sVersion,
+                                      epilog=sEpilog)
+    oParser.add_argument('sFile',
+                         metavar='FILE',
+                         help='Delimited file. [if set to "-" or "stdin" reads from standard in]')
+    oParser.add_argument('-o', '--out',
+                         metavar='STRING',
+                         dest='sOut',
+                         default=None,
+                         help='Outfile. File-ending determines outfile-type, e.g. image.pdf, will create a pdf, etc. [If not set, interactive mode enabled.]')
+    oParser.add_argument('-d', '--delimiter',
+                         metavar='STRING',
+                         dest='sDEL',
+                         default='\t',
+                         help='Delimiter used in file.  [default: "tab"]')
+    oParser.add_argument('-a', '--header',
+                         dest='bHead',
+                         action='store_true',
+                         default=False,
+                         help='Header in File. Header values will be variable names for each beanplot. [Default: False]')
+    oParser.add_argument('-c', '--columns',
+                         dest='aCols',
+                         metavar = 'INT',
+                         type=int,
+                         nargs='+',
+                         default=None,
+                         help='Columns to exclude.')
+
+    group1 = oParser.add_argument_group('Plot', 'General plotting arguments:')
+    group1.add_argument('-y', '--ylabel',
+                         metavar='STRING',
+                         type=str,
+                         dest='ylabel',
+                         default=None,
+                         help='y-label for the beangraph.')
+    group1.add_argument('-x', '--xlabel',
+                         metavar='STRING',
+                         type=str,
+                         dest='xlabel',
+                         default=None,
+                         help='x-label for the beanplot.')
+    group1.add_argument('--xmax',
+                         metavar='FLOAT',
+                         type=float,
+                         dest='fXmax',
+                         default=None,
+                         help='x-axis maximum limit.')
+    group1.add_argument('--xmin',
+                         metavar='FLOAT',
+                         type=float,
+                         dest='fXmin',
+                         default=None,
+                         help='x-axis minimum limit.')
+    group1.add_argument('--ymax',
+                         metavar='FLOAT',
+                         type=float,
+                         dest='fYmax',
+                         default=None,
+                         help='y-axis maximum limit.')
+    group1.add_argument('--ymin',
+                         metavar='FLOAT',
+                         type=float,
+                         dest='fYmin',
+                         default=None,
+                         help='y-axis minimum limit.')
+    group1.add_argument('--turn',
+                        dest='bTickTurn',
+                        action='store_true',
+                        default=False,
+                        help='Turn x-ticklabels by 90 degree to make them readable.')
+    group1.add_argument('--fontsize',
+                         metavar='INT',
+                         type=int,
+                         dest='iFont',
+                         default='14',
+                         help='Font-size. [default: 14]')
+    group1.add_argument('--linewidthaxis',
+                         metavar='INT',
+                         type=int,
+                         dest='iLine',
+                         default=2,
+                         help='Font-size of axis line-width. [default: 2]')
+    group1.add_argument('--connect',
+                         metavar='STRING',
+                         dest='sConnect',
+                         default=None,
+                         help='HTML-color code,transparency-level to use to connect row-elements to generate line-plot on top of beanplot. e.g. "#A4A4A4,0.15" [default: None]')
+    group1.add_argument('--pheight',
+                         metavar="FLOAT",
+                         type=float,
+                         dest='fHeight',
+                         default=4.,
+                         help='Set the picture-height in inches. [default: 4.]')
+    group1.add_argument('--pwidth',
+                         metavar="FLOAT",
+                         type=float,
+                         dest='fWidth',
+                         default=6.,
+                         help='Set the picture-width in inches. [default: 6.]')
+
+    group2 = oParser.add_argument_group('Beanplot', 'Beanplot specific arguments:')
+    group2.add_argument('--noOverallMean',
+                        dest='bMean',
+                        action='store_false',
+                        default=True,
+                        help='Turn off overall mean line.')
+    group2.add_argument('--overallMedian',
+                        dest='bMedian',
+                        action='store_true',
+                        default=False,
+                        help='Turn on overall median line. [Default: OFF]')
+    group2.add_argument('--noStrips',
+                        dest='bStrips',
+                        action='store_false',
+                        default=True,
+                        help='Turn off striplines lines.')
+    group2.add_argument('--noMeans',
+                        dest='bMean2',
+                        action='store_false',
+                        default=True,
+                        help='Turn off individual mean lines.')
+    group2.add_argument('--noMedians',
+                        dest='bMedian2',
+                        action='store_false',
+                        default=True,
+                        help='Turn off individual median points.')
+    group2.add_argument('--stripColor',
+                         metavar="HTMLCOLORCODE",
+                         type=str,
+                         dest='sStripColor',
+                         default='#FFFFFF',
+                         help='Set strip color [default: #FFFFFF (white)]')
+    group2.add_argument('--medianMarkerColor',
+                         metavar="HTMLCOLORCODE",
+                         type=str,
+                         dest='sMedianMarkerColor',
+                         default='#FFFFFF',
+                         help='Set median marker color [default: #FFFFFF (white)]')
+    group2.add_argument('--meanStripColor',
+                         metavar="HTMLCOLORCODE",
+                         type=str,
+                         dest='sMeanColor',
+                         default='#FFFFFF',
+                         help='Set mean strip color [default: #FFFFFF (white)]')
+    group2.add_argument('--violinColor',
+                         metavar="HTMLCOLORCODE",
+                         type=str,
+                         dest='sViolinColor',
+                         default='#3366CC',
+                         help='Set violin color [default: #3366CC (blue)]')
+    group2.add_argument('--multiplecolors',
+                         metavar="COLORMAP",
+                         dest='sColorMap',
+                         default='',
+                         help='Colormap (pylab.cm) for plotting violin colors, e.g winter, summer, autumn, rainbow, etc. [default: None]. Examples of possible colormaps here: http://wiki.scipy.org/Cookbook/Matplotlib/Show_colormaps')
+    
+    oArgs = oParser.parse_args()
+    return oArgs, oParser
+
+def load_file(s):
+    """ Depending on file-ending use different lib. """
+    if s in ['-', 'stdin']:
+        oF = sys.stdin
+    elif s.split('.')[-1] == 'gz':
+        oF = gzip.open(s)
+    elif s.split('.')[-1] == 'bz2':
+        oF = bz2.BZFile(s)
+    elif s.split('.')[-1] == 'zip':
+        oF = zipfile.Zipfile(s)
+    else:
+        oF = open(s)
+    return oF
+
+def main():
+    oArgs, oParser = parse_cmdline()
+
+    # Load the file
+    oF = load_file(oArgs.sFile)
+        
+    # delimited file handler
+    oR = csv.reader(oF, delimiter = oArgs.sDEL)
+
+    # Columns to exclude
+    aCols = []
+    if oArgs.aCols:
+        for i in oArgs.aCols:
+            if i < 1: oParser.error('Column numbers have to be > 0. EXIT')
+            aCols.append(i-1)
+
+    # Header in file
+    if oArgs.bHead:
+        aH = oR.next()
+        aH = [aH[i] for i in range(len(aH)) if i not in aCols]
+    else:
+        aH = None
+        
+    # THE DATA 
+    aM = []
+    for a in oR:
+        try:
+            a_temp = [float(a[i]) for i in range(len(a)) if i not in aCols]
+        except:
+            oParser.error('Could not convert all values to floats. EXIT.')
+        aM.append(a_temp)
+    aM = np.array(aM)
+
+    if aH:
+        aXticksNames = aH
+    else:
+        aXticksNames = range(1,aM.shape[1]+1)
+
+    # PLOTTING
+    fig = plt.figure(figsize=(oArgs.fWidth,oArgs.fHeight))
+    ax = fig.add_subplot(111)
+
+    # colormap
+    colors = []
+    cmap = None
+    if oArgs.sColorMap:
+        try:
+            cmap = eval("plt.cm.%s" %(oArgs.sColorMap))
+        except:
+            cmap = None
+    if cmap:
+        # 0.15 and 0.85 instead of 0,1
+        # Because many colormaps end/start in white or very light color, which
+        # is difficult to see with white background
+        # FIXME: could make this adjustable
+        colors = cmap(np.linspace(0.15, 0.85, aM.shape[1])) 
+
+    # TICKS
+    ax.set_xticks(range(1, aM.shape[1]+1)) # set tick positions
+    xtickNames = ax.set_xticklabels(aXticksNames) # set tick labels
+    # Turn labels 90 degree if desired
+    if oArgs.bTickTurn:
+        plt.setp(xtickNames, rotation=90)
+    else:
+        plt.setp(xtickNames, rotation=0)
+    
+    ax.spines['top'].set_visible(False) # get rid of top axis
+    plt.tick_params(axis='x',        # changes apply to the x-axis
+                    which='both',    # both major and minor ticks are affected
+                    bottom='on',     # ticks along the bottom edge are off
+                    top='off',       # ticks along the top edge are off
+                    direction='in',  # direction of ticks
+                    labelsize=oArgs.iFont,
+                    colors='k')
+
+    ax.spines['right'].set_visible(False) # get rid of right axis
+    plt.tick_params(axis='y',        # changes apply to the y-axis
+                    which='both',    # both major and minor ticks are affected
+                    left='on',       # ticks along the bottom edge are off
+                    right='off',     # ticks along the top edge are off 
+                    direction='in',  # direction of ticks
+                    labelsize=oArgs.iFont,
+                    colors='k')         
+    
+    # LABELS
+    if oArgs.xlabel:
+        plt.xlabel(oArgs.xlabel)
+        plt.setp(ax.xaxis.label, fontsize=oArgs.iFont)
+    if oArgs.ylabel:
+        plt.ylabel(oArgs.ylabel)
+        plt.setp(ax.yaxis.label, fontsize=oArgs.iFont)
+
+    # line-width of axis and ticks
+    for axis in ['bottom','left']:
+        ax.spines[axis].set_linewidth(oArgs.iLine)
+    ax.xaxis.set_tick_params(width=oArgs.iLine)
+    ax.yaxis.set_tick_params(width=oArgs.iLine)
+        
+    # LIMITS
+    ax.set_xlim([0,aM.shape[1]+1])
+
+    # PLOT lines for each row
+    # Useful if the datapoints of different beanplots are related
+    if oArgs.sConnect != None:
+        aTemp = [s.strip() for s in oArgs.sConnect.split(',')]
+        sColor = aTemp[0]
+        fAlpha = float(aTemp[1])
+        for i in xrange(aM.shape[0]):
+            ax.plot(range(1,aM.shape[1]+1), aM[i],'-', color=sColor, alpha=fAlpha)
+    
+    # BEANPLOT
+    beanplot(ax,
+             aM,
+             range(1,aM.shape[1]+1),
+             mean=oArgs.bMean2,
+             median=oArgs.bMedian2,
+             strip=oArgs.bStrips,
+             overallMean=oArgs.bMean,
+             overallMedian=oArgs.bMedian,
+             violinColor=oArgs.sViolinColor,
+             stripColor=oArgs.sStripColor,
+             medianMarkerColor=oArgs.sMedianMarkerColor,
+             meanColor=oArgs.sMeanColor,
+             multipleColors=colors)
+
+    fXMin = ax.get_xlim()[0]
+    fXMax = ax.get_xlim()[1]
+    fYMin = ax.get_ylim()[0]
+    fYMax = ax.get_ylim()[1]
+    if oArgs.fXmax!=None: fXMax = oArgs.fXmax
+    if oArgs.fXmin!=None: fXMin = oArgs.fXmin
+    if oArgs.fYmax!=None: fYMax = oArgs.fYmax
+    if oArgs.fYmin!=None: fYMin = oArgs.fYmin
+    ax.set_xlim([fXMin,fXMax])
+    ax.set_ylim([fYMin,fYMax])
+    
+    # ADJUST PLOT
+    #plt.subplots_adjust(left=0.20)    
+    #plt.subplots_adjust(bottom=0.20)
+
+    ## OUT
+    if oArgs.sOut:
+        plt.savefig(oArgs.sOut, bbox_inches='tight')
+    else:
+        fig.tight_layout()
+        plt.show()
+        
+    return
+        
+if __name__ == '__main__':
+    sys.exit(main())
