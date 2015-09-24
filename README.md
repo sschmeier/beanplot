@@ -35,7 +35,7 @@ DEPENDENCIES
 USAGE
 -----
 
-```bash
+```
 $./beanplot -h
 usage: beanplot [-h] [-v] [-o STRING] [-d STRING] [-a] [-c INT [INT ...]]
                 [-y STRING] [-x STRING] [--xmax FLOAT] [--xmin FLOAT]
