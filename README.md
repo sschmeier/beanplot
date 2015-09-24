@@ -37,8 +37,9 @@ USAGE
 
 ```bash
 $./beanplot -h
+usage: beanplot [-h] [-v] [-o STRING] [-d STRING] [-a] [-c INT [INT ...]]
                 [-y STRING] [-x STRING] [--xmax FLOAT] [--xmin FLOAT]
-                [--ymax FLOAT] [--ymin FLOAT] [--turn] [--fontsize INT]
+                [--ymax FLOAT] [--ymin FLOAT] [--turn] [--fontsize INT]xs
                 [--linewidthaxis INT] [--connect STRING] [--pheight FLOAT]
                 [--pwidth FLOAT] [--noOverallMean] [--overallMedian]
                 [--noStrips] [--noMeans] [--noMedians]
